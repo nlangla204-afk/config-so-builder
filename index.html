@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Config SO Builder – FROM.xml + C/C++ thành libconfig.so</title>
+<meta name="description" content="Builder biến FROM.xml và mã nguồn C/C++ thành libconfig.so thật bằng clang++ trên Termux/Android.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0f2747; --ink2:#14325a; --ink3:#0b1f3a;
+  --line:#35608f; --soft:rgba(143,184,232,.16);
+  --paper:#eaf1fa; --muted:#9db6d6;
+  --signal:#ffd166; --ok:#7ee2b8; --err:#ff8080;
+  --sans:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--ink);color:var(--paper);font:400 1.0625rem/1.6 var(--sans);
+  background-image:linear-gradient(var(--soft) 1px,transparent 1px),linear-gradient(90deg,var(--soft) 1px,transparent 1px);
+  background-size:40px 40px;background-position:-1px -1px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+code,pre,textarea,.mono{font-family:var(--mono)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:5;background:rgba(15,39,71,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+.brand{white-space:nowrap;font-weight:800;text-decoration:none;letter-spacing:-.01em}
+.top nav{display:flex;gap:22px;font-size:.95rem}
+.top nav a{text-decoration:none;color:var(--muted)}
+.top nav a:hover{color:var(--paper)}
+
+/* hero */
+.hero{padding:72px 0 64px}
+.hero .wrap{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center}
+h1{font-size:clamp(2.4rem,5.6vw,4.4rem);line-height:1;letter-spacing:-.035em;font-weight:800;margin:0 0 20px}
+.lead{max-width:34rem;color:var(--muted);font-size:1.15rem;margin:0 0 28px}
+.btns{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px}
+.btn{display:inline-block;padding:12px 20px;border:1px solid var(--paper);text-decoration:none;font-weight:600;border-radius:3px}
+.btn.primary{background:var(--signal);border-color:var(--signal);color:#1b2a06;color:#231a00}
+.btn.primary:hover{background:#ffdc85}
+.btn:not(.primary):hover{background:rgba(234,241,250,.08)}
+.cmd{background:var(--ink3);border:1px solid var(--line);border-radius:4px;display:flex;align-items:stretch;max-width:34rem}
+.cmd pre{margin:0;padding:12px 16px;overflow-x:auto;flex:1;font-size:.9rem;line-height:1.7}
+.cmd button,.copy{background:none;border:0;border-left:1px solid var(--line);color:var(--muted);padding:0 14px;cursor:pointer;font:500 .85rem var(--sans)}
+.cmd button:hover,.copy:hover{color:var(--signal)}
+
+.pipe{list-style:none;margin:0;padding:0 0 0 26px;position:relative;border-left:2px solid var(--line)}
+.pipe li{position:relative;padding:0 0 22px 18px}
+.pipe li:last-child{padding-bottom:0}
+.pipe li::before{content:"";position:absolute;left:-36px;top:5px;width:14px;height:14px;background:var(--ink);border:2px solid var(--line);border-radius:50%;transition:.25s}
+.pipe li.on::before{background:var(--ok);border-color:var(--ok)}
+.pipe li.bad::before{background:var(--err);border-color:var(--err)}
+.pipe li.final::before{border-radius:2px;border-color:var(--signal)}
+.pipe b{display:block;font-size:1.1rem}
+.pipe span{color:var(--muted);font-size:.92rem}
+.pipe .tag{font-family:var(--mono);font-size:.78rem;color:var(--signal)}
+@media (prefers-reduced-motion:no-preference){
+  .pipe li{animation:rise .5s both}
+  .pipe li:nth-child(2){animation-delay:.12s}.pipe li:nth-child(3){animation-delay:.24s}
+  .pipe li:nth-child(4){animation-delay:.36s}.pipe li:nth-child(5){animation-delay:.48s}.pipe li:nth-child(6){animation-delay:.6s}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+}
+
+/* sections */
+section.block{padding:72px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(1.7rem,3.4vw,2.5rem);letter-spacing:-.025em;line-height:1.1;margin:0 0 12px;font-weight:800}
+.sub{color:var(--muted);max-width:40rem;margin:0 0 36px}
+
+/* workbench */
+.bench{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+.panel{background:var(--ink2);border:1px solid var(--line);border-radius:4px}
+.panel>h3{margin:0;padding:10px 16px;border-bottom:1px solid var(--line);font-size:.95rem;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.panel .body{padding:16px}
+textarea{width:100%;min-height:520px;background:var(--ink3);color:var(--paper);border:0;border-radius:0 0 4px 4px;padding:16px;font-size:.84rem;line-height:1.65;resize:vertical;tab-size:4;white-space:pre;overflow:auto}
+.status{font-weight:600;padding:10px 14px;border-radius:3px;margin-bottom:12px;border:1px solid}
+.status.ok{color:var(--ok);border-color:var(--ok);background:rgba(126,226,184,.08)}
+.status.bad{color:var(--err);border-color:var(--err);background:rgba(255,128,128,.08)}
+.errs{margin:0 0 14px;padding-left:20px;color:var(--err);font-size:.94rem}
+.note{color:var(--muted);font-size:.88rem;margin:0}
+.sl{display:grid;grid-template-columns:110px 1fr 64px;gap:12px;align-items:center;margin:8px 0;font-size:.92rem}
+.sl label{font-family:var(--mono);font-size:.85rem}
+.sl output{font-family:var(--mono);text-align:right;color:var(--signal);font-size:.85rem}
+input[type=range]{width:100%;accent-color:var(--signal)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.charts figure{margin:0}
+.charts figcaption{font-size:.82rem;color:var(--muted);margin-top:4px}
+svg.plot{width:100%;height:auto;background:var(--ink3);border:1px solid var(--line);border-radius:3px;display:block}
+svg .g{stroke:var(--soft);stroke-width:1}
+svg .ax{stroke:var(--line);stroke-width:1.2}
+svg .cv{fill:none;stroke:var(--signal);stroke-width:2.2}
+svg .dz{fill:rgba(255,209,102,.1)}
+svg text{fill:var(--muted);font:11px var(--mono)}
+.gen{margin:16px 0 0;background:var(--ink3);border:1px solid var(--line);padding:12px 14px;border-radius:3px;font-size:.78rem;line-height:1.6;overflow-x:auto;color:#cfe0f5}
+
+/* elf */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.hex{background:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:16px;font-size:.9rem;line-height:1.8}
+.hex h3{font:600 1rem var(--sans);margin:0 0 8px}
+.hex .b{color:var(--muted)}
+.hex .hi{color:var(--signal)}
+.drop{display:block;border:2px dashed var(--line);border-radius:4px;padding:28px 18px;text-align:center;cursor:pointer;color:var(--muted);transition:.2s}
+.drop:hover,.drop.over{border-color:var(--signal);color:var(--paper);background:rgba(255,209,102,.05)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+#elfOut{margin-top:14px;min-height:96px}
+#elfOut .res{font-weight:600;font-size:1.05rem;margin-bottom:6px}
+#elfOut .res.ok{color:var(--ok)} #elfOut .res.bad{color:var(--err)}
+#elfOut code{font-size:.85rem;word-break:break-all}
+
+/* steps */
+.steps{list-style:none;padding:0;margin:0;display:grid;gap:18px;counter-reset:s}
+.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start}
+.steps li::before{content:counter(s);width:44px;height:44px;border:1px solid var(--signal);color:var(--signal);display:grid;place-items:center;font:600 1.1rem var(--mono);border-radius:3px}
+.steps h3{margin:0 0 6px;font-size:1.15rem}
+.steps .cmd{max-width:40rem}
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:.92rem}
+
+@media (max-width:860px){
+  .hero{padding:44px 0}
+  .hero .wrap,.bench,.two,.charts{grid-template-columns:1fr}
+  .top nav{gap:12px;font-size:.82rem}.top nav a{white-space:nowrap}
+  textarea{min-height:360px}
+  .sl{grid-template-columns:90px 1fr 56px}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#">Config SO Builder</a>
+  <nav aria-label="Điều hướng"><a href="#thu">Thử FROM.xml</a><a href="#elf">Kiểm tra .so</a><a href="#dung">Cách dùng</a></nav>
+</div></header>
+
+<main>
+<section class="hero"><div class="wrap">
+  <div>
+    <h1>FROM.xml vào, libconfig.so ra.</h1>
+    <p class="lead">Một builder gọn cho Termux/Android: đọc FROM.xml, kiểm tra cấu hình, biên dịch mã C/C++ trong Source/ bằng clang++ rồi link thành thư viện native thật.</p>
+    <div class="btns">
+      <a class="btn primary" href="downloads/Config_SO_Builder.zip" download>Tải builder (.zip)</a>
+      <a class="btn" href="#thu">Thử sửa FROM.xml ngay</a>
+    </div>
+    <div class="cmd"><pre id="c0">pkg install clang
+bash build.sh</pre><button type="button" class="copy" data-copy="c0">Sao chép</button></div>
+  </div>
+  <ol class="pipe" id="pipe" aria-label="Quy trình build">
+    <li class="on"><b>FROM.xml</b><span>khung cấu hình: module, giá trị, export</span></li>
+    <li id="pValidate"><b>Kiểm tra</b><span id="pValidateTxt">đang chờ</span></li>
+    <li><b>Đọc Source/</b><span>*.c, *.cc, *.cpp</span></li>
+    <li><b>Biên dịch</b><span class="tag">clang++ -fPIC -std=c++17</span></li>
+    <li><b>Link</b><span class="tag">-shared</span></li>
+    <li class="final"><b>output/libconfig.so</b><span>file ELF thật, kiểm tra symbol export</span></li>
+  </ol>
+</div></section>
+
+<section class="block" id="thu"><div class="wrap">
+  <h2>Sửa FROM.xml, xem kết quả ngay</h2>
+  <p class="sub">Trình duyệt chạy cùng các luật kiểm tra như build.sh. Kéo thanh trượt để xem bộ lọc đầu vào phản ứng thế nào với sensitivity, smooth, maxSpeed và deadZone. Bước biên dịch và link chỉ chạy trên máy của bạn.</p>
+  <div class="bench">
+    <div class="panel">
+      <h3><span>FROM_Premium/FROM.xml</span><button type="button" class="copy" style="border:0;padding:0" id="resetXml">Khôi phục mẫu</button></h3>
+      <textarea id="xml" spellcheck="false" aria-label="Nội dung FROM.xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!--
+  FROM.xml - metadata/container cho Config SO Builder.
+  Quy uoc: moi phan tu (Target/Module/Value/Export) nam tren MOT dong,
+  de build.sh doc duoc bang cong cu shell co san (khong can python).
+--&gt;
+&lt;FROM name="PremiumConfig" version="1.0"&gt;
+    &lt;Target output="libconfig.so" std="c++17" abi="arm64-v8a" /&gt;
+
+    &lt;Modules&gt;
+        &lt;Module name="runtime"   src="config_runtime.cpp" /&gt;
+        &lt;Module name="buildinfo" src="config_buildinfo.c" /&gt;
+    &lt;/Modules&gt;
+
+    &lt;Values&gt;
+        &lt;Value name="sensitivity" type="float" default="1.00"  min="0.10" max="10.00" /&gt;
+        &lt;Value name="smooth"      type="float" default="0.50"  min="0.00" max="1.00" /&gt;
+        &lt;Value name="maxSpeed"    type="float" default="100.0" min="1.0"  max="1000.0" /&gt;
+        &lt;Value name="deadZone"    type="float" default="0.05"  min="0.00" max="0.50" /&gt;
+    &lt;/Values&gt;
+
+    &lt;Exports&gt;
+        &lt;Export symbol="config_init" /&gt;
+        &lt;Export symbol="config_shutdown" /&gt;
+        &lt;Export symbol="config_get_float" /&gt;
+        &lt;Export symbol="config_set_float" /&gt;
+        &lt;Export symbol="config_reset" /&gt;
+        &lt;Export symbol="config_save" /&gt;
+        &lt;Export symbol="config_apply_filter" /&gt;
+        &lt;Export symbol="config_last_error" /&gt;
+        &lt;Export symbol="config_build_info" /&gt;
+    &lt;/Exports&gt;
+&lt;/FROM&gt;
+</textarea>
+    </div>
+    <div class="panel">
+      <h3><span>Kết quả</span></h3>
+      <div class="body">
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <ul id="errs" class="errs"></ul>
+        <div id="sliders"></div>
+        <div class="charts">
+          <figure><svg id="plotStatic" class="plot" viewBox="0 0 300 210" role="img" aria-label="Đường phản hồi tĩnh"></svg><figcaption>Đầu vào (ngang) → tốc độ đầu ra (dọc)</figcaption></figure>
+          <figure><svg id="plotStep" class="plot" viewBox="0 0 300 210" role="img" aria-label="Đáp ứng bước"></svg><figcaption>Nhấn giữ đầu vào = 1, theo thời gian</figcaption></figure>
+        </div>
+        <pre class="gen" id="gen" aria-label="Mã sinh ra"></pre>
+        <p class="note" style="margin-top:10px">Tệp Source/ được khai báo trong Modules có tồn tại hay không sẽ được build.sh kiểm tra khi chạy thật.</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="block" id="elf"><div class="wrap">
+  <h2>.so là ELF thật, không phải đổi đuôi</h2>
+  <p class="sub">Đổi tên libconfig.xml thành libconfig.so không tạo ra thư viện. Hệ điều hành đọc vài byte đầu để biết đó có phải ELF không. Thử với file của bạn, trình duyệt chỉ đọc 64 byte đầu và không tải file lên đâu cả.</p>
+  <div class="two">
+    <div>
+      <div class="hex" style="margin-bottom:16px">
+        <h3>FROM.xml (văn bản)</h3>
+        <span class="hi">3C 3F 78 6D 6C</span> <span class="b">20 76 65 72 73 69 6F 6E …</span><br>
+        <span class="b">chuỗi ký tự &lt;?xml version …</span>
+      </div>
+      <div class="hex">
+        <h3>libconfig.so (ELF)</h3>
+        <span class="hi">7F 45 4C 46</span> <span class="b">02 01 01 00 … 03 00 B7 00</span><br>
+        <span class="b">7F "ELF", 64-bit, little-endian, ET_DYN, aarch64</span>
+      </div>
+    </div>
+    <div>
+      <label class="drop" id="drop"><input type="file" id="file">Kéo thả hoặc chọn một file để kiểm tra 64 byte đầu</label>
+      <div id="elfOut" aria-live="polite"></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="block" id="dung"><div class="wrap">
+  <h2>Chạy trên Termux</h2>
+  <p class="sub">Build cho ra .so cùng kiến trúc với máy đang build. Trên điện thoại arm64, đó là aarch64.</p>
+  <ol class="steps">
+    <li><div><h3>Cài clang, một lần</h3><div class="cmd"><pre id="s1">pkg update &amp;&amp; pkg install clang</pre><button type="button" class="copy" data-copy="s1">Sao chép</button></div></div></li>
+    <li><div><h3>Giải nén và vào thư mục</h3><div class="cmd"><pre id="s2">unzip Config_SO_Builder.zip
+cd Config_SO_Builder</pre><button type="button" class="copy" data-copy="s2">Sao chép</button></div></div></li>
+    <li><div><h3>Build, rồi chạy test nếu muốn</h3><div class="cmd"><pre id="s3">bash build.sh
+bash build.sh test</pre><button type="button" class="copy" data-copy="s3">Sao chép</button></div><p class="note" style="margin-top:8px">Kết quả nằm ở output/libconfig.so. Lỗi được gắn nhãn ENV, FROM, SOURCE, COMPILE, LINK hoặc VERIFY.</p></div></li>
+  </ol>
+</div></section>
+</main>
+
+<footer><div class="wrap">Trang tĩnh chạy hoàn toàn trong trình duyệt của bạn, không gửi dữ liệu đi đâu. Builder là công cụ cấu hình tổng quát, không chứa chức năng hook, inject hay bypass.</div></footer>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const DEFAULT_XML=$("#xml").value;
+
+/* ---- copy buttons ---- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-copy]"); if(!b) return;
+  const t=document.getElementById(b.dataset.copy).textContent;
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{
+    const o=b.textContent; b.textContent="Đã chép"; setTimeout(()=>b.textContent=o,1400);
+  }).catch(()=>{});
+});
+
+/* ---- validate (cùng luật với build.sh) ---- */
+const attr=(line,n)=>{const m=line.match(new RegExp("\\s"+n+'="([^"]*)"'));return m?m[1]:"";};
+const isNum=v=>/^-?[0-9]+(\.[0-9]+)?$/.test(v);
+const flit=v=>v.indexOf(".")>=0?v+"f":v+".0f";
+
+function validate(text){
+  const errs=[],out={errs,values:[],modules:0,exports:0,name:"",version:""};
+  if(!text.trim()){errs.push("FROM.xml rỗng.");return out;}
+  const doc=new DOMParser().parseFromString(text,"application/xml");
+  if(doc.querySelector("parsererror")) errs.push("Không phải XML hợp lệ (thẻ chưa đóng hoặc sai cú pháp).");
+  const lines=text.split("\n");
+  const pick=re=>lines.filter(l=>re.test(l));
+  const root=pick(/^\s*<FROM\s/)[0];
+  if(!root) errs.push('Thiếu thẻ gốc <FROM name="..." version="...">.');
+  else{
+    out.name=attr(root,"name");out.version=attr(root,"version");
+    if(!out.name||!out.version) errs.push("<FROM> phải có name và version.");
+    else{
+      if(!/^[A-Za-z0-9_.-]+$/.test(out.name)) errs.push("name '"+out.name+"' có ký tự không hợp lệ.");
+      if(!/^[0-9A-Za-z_.-]+$/.test(out.version)) errs.push("version '"+out.version+"' không hợp lệ.");
+    }
+  }
+  ["Target","Modules","Values","Exports"].forEach(t=>{
+    if(!new RegExp("<"+t+"[ />]").test(text)) errs.push("Thiếu thẻ <"+t+">.");
+  });
+  const tg=pick(/^\s*<Target\s/)[0];
+  if(tg){
+    const o=attr(tg,"output")||"libconfig.so", s=attr(tg,"std")||"c++17";
+    if(o!=="libconfig.so") errs.push("Target output phải là libconfig.so (hiện là '"+o+"').");
+    if(!["c++14","c++17","c++20"].includes(s)) errs.push("Target std '"+s+"' không hỗ trợ (c++14, c++17, c++20).");
+  }
+  pick(/^\s*<Module\s/).forEach(l=>{
+    const n=attr(l,"name"),s=attr(l,"src");
+    if(!n||!s) errs.push("Module thiếu name hoặc src.");
+    else if(s.indexOf("..")>=0||s[0]==="/") errs.push("Module '"+n+"': src không được chứa '..' hay đường dẫn tuyệt đối.");
+    else out.modules++;
+  });
+  if(!out.modules&&!errs.some(e=>e.startsWith("Module"))) errs.push("<Modules> chưa có <Module ... /> nào.");
+  const seen={};
+  pick(/^\s*<Value\s/).forEach(l=>{
+    const n=attr(l,"name"),t=attr(l,"type"),d=attr(l,"default"),lo=attr(l,"min"),hi=attr(l,"max");
+    if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)){errs.push("Value name '"+n+"' không hợp lệ.");return;}
+    if(t!=="float"){errs.push("Value '"+n+"': type phải là float (hiện là '"+t+"').");return;}
+    for(const v of [d,lo,hi]) if(!isNum(v)){errs.push("Value '"+n+"': default/min/max phải là số (gặp '"+v+"').");return;}
+    const D=+d,L=+lo,H=+hi;
+    if(!(L<=H&&D>=L&&D<=H)){errs.push("Value '"+n+"': phải thỏa min ≤ default ≤ max ("+lo+" ≤ "+d+" ≤ "+hi+").");return;}
+    if(seen[n]){errs.push("Value '"+n+"' bị khai báo trùng.");return;}
+    seen[n]=1; out.values.push({name:n,d:D,lo:L,hi:H,sd:d,slo:lo,shi:hi});
+  });
+  if(!out.values.length&&!errs.some(e=>e.startsWith("Value"))) errs.push("<Values> chưa có <Value ... /> nào.");
+  pick(/^\s*<Export\s/).forEach(l=>{
+    const s=attr(l,"symbol");
+    if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) errs.push("Export symbol '"+s+"' không hợp lệ.");
+    else out.exports++;
+  });
+  if(!out.exports&&!errs.some(e=>e.startsWith("Export"))) errs.push("<Exports> chưa có <Export ... /> nào.");
+  return out;
+}
+
+/* ---- bộ lọc (bản JS của config_apply_filter) ---- */
+function filt(inp,prev,dt,p){
+  const mag=Math.abs(inp);let x=0;
+  if(mag>p.dz){x=Math.sign(inp)*(mag-p.dz)/(1-p.dz);}
+  x*=p.sens;
+  const target=Math.max(-1,Math.min(1,x))*p.vmax;
+  const md=p.vmax*dt*4;
+  const lim=prev+Math.max(-md,Math.min(md,target-prev));
+  return prev+(lim-prev)*(1-p.smooth);
+}
+function statics(inp,p){const mag=Math.abs(inp);let x=0;if(mag>p.dz)x=Math.sign(inp)*(mag-p.dz)/(1-p.dz);return Math.max(-1,Math.min(1,x*p.sens))*p.vmax;}
+
+/* ---- vẽ SVG ---- */
+function plot(svg,o){
+  const W=300,H=210,L=44,R=12,T=12,B=30,pw=W-L-R,ph=H-T-B;
+  const X=v=>L+(v-o.x0)/(o.x1-o.x0)*pw, Y=v=>T+ph-(v-o.y0)/(o.y1-o.y0)*ph;
+  let s="";
+  o.xt.forEach(t=>{s+=`<line class="g" x1="${X(t[0])}" x2="${X(t[0])}" y1="${T}" y2="${T+ph}"/><text x="${X(t[0])}" y="${H-12}" text-anchor="middle">${t[1]}</text>`;});
+  o.yt.forEach(t=>{s+=`<line class="g" y1="${Y(t[0])}" y2="${Y(t[0])}" x1="${L}" x2="${L+pw}"/><text x="${L-6}" y="${Y(t[0])+4}" text-anchor="end">${t[1]}</text>`;});
+  if(o.shade) s+=`<rect class="dz" x="${X(o.shade[0])}" y="${T}" width="${X(o.shade[1])-X(o.shade[0])}" height="${ph}"/>`;
+  s+=`<line class="ax" x1="${L}" x2="${L}" y1="${T}" y2="${T+ph}"/><line class="ax" x1="${L}" x2="${L+pw}" y1="${T+ph}" y2="${T+ph}"/>`;
+  s+=`<path class="cv" d="${o.pts.map((p,i)=>(i?"L":"M")+X(p[0]).toFixed(1)+" "+Y(p[1]).toFixed(1)).join("")}"/>`;
+  svg.innerHTML=s;
+}
+const fmt=v=>Math.abs(v)>=100?Math.round(v)+"":(+v.toFixed(2))+"";
+
+/* ---- trạng thái ---- */
+let vals={};       // name -> giá trị hiện tại
+let lastKey="";
+
+function params(){
+  const g=(n,d)=>vals[n]!==undefined?vals[n]:d;
+  return {sens:g("sensitivity",1),smooth:g("smooth",.5),vmax:g("maxSpeed",100),dz:g("deadZone",.05)};
+}
+function drawCharts(){
+  const p=params(),pts=[];
+  for(let x=-1;x<=1.0001;x+=.01) pts.push([x,statics(x,p)]);
+  plot($("#plotStatic"),{x0:-1,x1:1,y0:-p.vmax,y1:p.vmax,pts,shade:[-p.dz,p.dz],
+    xt:[[-1,"-1"],[0,"0"],[1,"1"]],yt:[[-p.vmax,fmt(-p.vmax)],[0,"0"],[p.vmax,fmt(p.vmax)]]});
+  const sp=[];let y=0;const dt=1/60;
+  for(let i=0;i<=90;i++){sp.push([i*dt,y]);y=filt(1,y,dt,p);}
+  plot($("#plotStep"),{x0:0,x1:1.5,y0:0,y1:p.vmax,pts:sp,
+    xt:[[0,"0s"],[.75,".75s"],[1.5,"1.5s"]],yt:[[0,"0"],[p.vmax/2,fmt(p.vmax/2)],[p.vmax,fmt(p.vmax)]]});
+}
+function buildSliders(list){
+  const box=$("#sliders");box.innerHTML="";
+  list.forEach(v=>{
+    let cur=vals[v.name]!==undefined?Math.min(v.hi,Math.max(v.lo,vals[v.name])):v.d;
+    vals[v.name]=cur;
+    const row=document.createElement("div");row.className="sl";
+    const step=(v.hi-v.lo)/200||.01;
+    row.innerHTML=`<label for="r_${v.name}">${v.name}</label><input type="range" id="r_${v.name}" min="${v.lo}" max="${v.hi}" step="${step}" value="${cur}"><output>${fmt(cur)}</output>`;
+    const inp=row.querySelector("input"),out=row.querySelector("output");
+    inp.addEventListener("input",()=>{vals[v.name]=+inp.value;out.textContent=fmt(+inp.value);drawCharts();});
+    box.appendChild(row);
+  });
+}
+function run(){
+  const r=validate($("#xml").value);
+  const st=$("#status"),el=$("#errs"),pv=$("#pValidate");
+  el.innerHTML="";
+  if(r.errs.length){
+    st.className="status bad";st.textContent="FROM.xml chưa hợp lệ: "+r.errs.length+" lỗi";
+    r.errs.forEach(e=>{const li=document.createElement("li");li.textContent=e;el.appendChild(li);});
+    pv.className="bad";$("#pValidateTxt").textContent="lỗi, cần sửa FROM.xml";
+  }else{
+    st.className="status ok";
+    st.textContent="FROM '"+r.name+"' v"+r.version+" hợp lệ: "+r.modules+" module, "+r.values.length+" value, "+r.exports+" export";
+    pv.className="on";$("#pValidateTxt").textContent="hợp lệ: "+r.values.length+" value, "+r.exports+" export";
+  }
+  const key=JSON.stringify(r.values.map(v=>[v.name,v.lo,v.hi,v.d]));
+  if(key!==lastKey){lastKey=key;
+    Object.keys(vals).forEach(k=>{if(!r.values.some(v=>v.name===k))delete vals[k];});
+    buildSliders(r.values);}
+  drawCharts();
+  $("#gen").textContent="// build/generated/config_defaults.cpp (sinh từ FROM.xml)\nconst ConfigDefault kConfigDefaults[] = {\n"+
+    r.values.map(v=>'    {"'+v.name+'", '+flit(v.sd)+", "+flit(v.slo)+", "+flit(v.shi)+"},").join("\n")+
+    "\n};\nconst size_t kConfigDefaultCount = "+r.values.length+";";
+}
+let tm;$("#xml").addEventListener("input",()=>{clearTimeout(tm);tm=setTimeout(run,150);});
+$("#resetXml").addEventListener("click",()=>{$("#xml").value=DEFAULT_XML;vals={};lastKey="";run();});
+run();
+
+/* ---- kiểm tra ELF ---- */
+const MACH={3:"x86",40:"ARM 32-bit",62:"x86-64",183:"aarch64 (arm64)",243:"RISC-V"};
+const TYPE={1:"relocatable (.o)",2:"executable",3:"shared object hoặc PIE (ET_DYN)",4:"core dump"};
+const hex=b=>Array.from(b).map(x=>x.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+const asc=b=>Array.from(b).map(x=>x>=32&&x<127?String.fromCharCode(x):".").join("");
+function checkFile(f){
+  const out=$("#elfOut");
+  if(!f) return;
+  f.slice(0,64).arrayBuffer().then(buf=>{
+    const b=new Uint8Array(buf);
+    const head=b.slice(0,16);
+    let html="";
+    if(b.length>=20&&b[0]===0x7f&&b[1]===0x45&&b[2]===0x4c&&b[3]===0x46){
+      const cls=b[4]===2?"64-bit":b[4]===1?"32-bit":"?", end=b[5]===1?"little-endian":b[5]===2?"big-endian":"?";
+      const le=b[5]!==2, t=le?b[16]|b[17]<<8:b[17]|b[16]<<8, m=le?b[18]|b[19]<<8:b[19]|b[18]<<8;
+      html=`<div class="res ok">Đây là file ELF thật</div><div>${cls}, ${end}, ${TYPE[t]||"loại "+t}, kiến trúc ${MACH[m]||"mã "+m}</div>`;
+    }else{
+      html=`<div class="res bad">Không phải ELF</div><div>Hệ điều hành sẽ từ chối nạp file này bằng dlopen, dù đuôi là gì.</div>`;
+    }
+    html+=`<div style="margin-top:8px"><code>${hex(head)}</code><br><code>${asc(head).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</code></div>`;
+    out.innerHTML=html;
+  });
+}
+const drop=$("#drop"),file=$("#file");
+file.addEventListener("change",()=>checkFile(file.files[0]));
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>checkFile(e.dataTransfer.files[0]));
+})();
+</script>
+</body>
+</html>
